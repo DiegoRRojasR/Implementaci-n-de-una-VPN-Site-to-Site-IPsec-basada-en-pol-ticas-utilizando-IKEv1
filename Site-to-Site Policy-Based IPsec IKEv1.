@@ -1,0 +1,169 @@
+PC-A
+ip 10.9.18.10/24 10.9.18.1
+
+PC-B
+ip 10.9.19.10/24 10.9.19.1
+
+------------------------------------------------------
+
+Configuración del Router ISP
+
+enable
+conf t
+hostname ISP
+
+no ip domain-lookup
+
+interface g0/0
+ip address 172.16.9.2 255.255.255.252
+no shutdown
+
+interface g0/1
+ip address 172.16.9.6 255.255.255.252
+no shutdown
+
+exit
+end
+write
+
+------------------------------------------------------
+
+Configuración de R1
+
+enable
+conf t
+hostname R1
+
+no ip domain-lookup
+
+interface g0/0
+ip address 172.16.9.1 255.255.255.252
+no shutdown
+
+interface g0/1
+ip address 10.9.18.1 255.255.255.0
+no shutdown
+
+exit
+
+ip route 10.9.19.0 255.255.255.0 172.16.9.2
+
+end
+
+conf t
+ip route 0.0.0.0 0.0.0.0 172.16.9.2
+end
+wr mem
+
+------------------------------------------------------
+
+onfiguración de R2
+
+enable
+conf t
+hostname R2
+
+no ip domain-lookup
+
+interface g0/0
+ip address 172.16.9.5 255.255.255.252
+no shutdown
+
+interface g0/1
+ip address 10.9.19.1 255.255.255.0
+no shutdown
+
+exit
+
+ip route 10.9.18.0 255.255.255.0 172.16.9.6
+
+end
+
+conf t
+ip route 0.0.0.0 0.0.0.0 172.16.9.6
+end
+wr mem
+
+------------------------------------------------------
+
+Config IPsec IKEv1 en R1
+
+conf t
+
+! Trafico interesante (LAN-A <-> LAN-B)
+ip access-list extended ACL-VPN
+ permit ip 10.9.18.0 0.0.0.255 10.9.19.0 0.0.0.255
+
+! IKEv1 - Phase 1
+crypto isakmp policy 10
+ encr aes 256
+ hash sha
+ authentication pre-share
+ group 14
+ lifetime 86400
+
+crypto isakmp key C1sco-0918 address 172.16.9.5
+
+! IPsec - Phase 2
+crypto ipsec transform-set TS esp-aes 256 esp-sha-hmac
+ mode tunnel
+
+crypto map VPNMAP 10 ipsec-isakmp
+ set peer 172.16.9.5
+ set transform-set TS
+ match address ACL-VPN
+
+interface g0/0
+ crypto map VPNMAP
+end
+wr mem
+
+------------------------------------------------------
+
+Config IPsec IKEv1 en R2
+
+conf t
+
+ip access-list extended ACL-VPN
+ permit ip 10.9.19.0 0.0.0.255 10.9.18.0 0.0.0.255
+
+crypto isakmp policy 10
+ encr aes 256
+ hash sha
+ authentication pre-share
+ group 14
+ lifetime 86400
+
+crypto isakmp key C1sco-0918 address 172.16.9.1
+
+crypto ipsec transform-set TS esp-aes 256 esp-sha-hmac
+ mode tunnel
+
+crypto map VPNMAP 10 ipsec-isakmp
+ set peer 172.16.9.1
+ set transform-set TS
+ match address ACL-VPN
+
+interface g0/0
+ crypto map VPNMAP
+end
+wr mem
+
+------------------------------------------------------
+
+Activar el túnel
+
+ping 10.9.19.10
+
+------------------------------------------------------
+
+Verificación
+
+En R1 y/o R2:
+
+Estado IKEv1
+show crypto isakmp sa
+
+show crypto ipsec sa
+
+show crypto mapshow crypto map
